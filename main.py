@@ -97,48 +97,43 @@ rules = [
 ]
 url = "http://localhost:9010/tregex"
 treesList = []
-data = ["Darwin studied how species evolve"]
-text = data[0]
-temp = []
-for rule in rules:
-    request_params = {"pattern": rule}
-    r = requests.post(url, data=text.encode('utf-8'), params=request_params)
-    s = r.json()
-    temp.append(list(s['sentences']))
+data = sentences[:5]
+for (i,text) in enumerate(data):
+    temp = []
+    for rule in rules:
+        request_params = {"pattern": rule}
+        r = requests.post(url, data=text.encode('utf-8'), params=request_params)
+        s = r.json()
+        temp.append(list(s['sentences']))
+    unmovableWords = []
+    for j in temp:
+        for k in j:
+            for l in k:
+                if 'namedNodes' in k[l]:
+                    if 'unmv' in k[l]['namedNodes'][0]:
+                        string = k[l]['namedNodes'][0]['unmv']
+                        unmovableWords.extend(getNodes(Tree.fromstring(string)))
+    unmovableWords.sort(key=len, reverse=True)
+    finalList = []
+    exceptions = ["-LRB-", "-RRB-", ":", ","]
+    for phrase in unmovableWords:
+        tmp = []
+        for word in phrase:
+            if word not in exceptions:
+                tmp.append(word)
+        finalList.append(tmp)
+    finalList.sort(key=len, reverse=True)
+    sentExceptions = ["(",")",":",","]
+    for sentExcept in sentExceptions:
+        text = text.replace(sentExcept, "")
 
-unmovableWords = []
-for j in temp:
-    for k in j:
-        for l in k:
-            if 'namedNodes' in k[l]:
-                if 'unmv' in k[l]['namedNodes'][0]:
-                    string = k[l]['namedNodes'][0]['unmv']
-                    unmovableWords.extend(getNodes(Tree.fromstring(string)))
-unmovableWords.sort(key=len, reverse=True)
-finalList = []
-exceptions = ["-LRB-", "-RRB-", ":", ","]
-for phrase in unmovableWords:
-    tmp = []
-    for word in phrase:
-        if word not in exceptions:
-            tmp.append(word)
-    finalList.append(tmp)
-finalList.sort(key=len, reverse=True)
-sentExceptions = ["(",")",":",","]
-for sentExcept in sentExceptions:
-    text = text.replace(sentExcept, "")
+    for phraseList in finalList:
+        phrase = " ".join(phraseList)
+        pattern = "\s(" + phrase + ")[\s|,|:|-]"
+        tp = " " + text + " "
+        text = re.sub(pattern, " *#$% ", tp).strip()
 
-for phraseList in finalList:
-    phrase = " ".join(phraseList)
-    pattern = "\s(" + phrase + ")[\s|,|:|-]"
-    print (text, pattern)
-    tp = " " + text + " "
-    print (tp, pattern)
-    text = re.sub(pattern, " *#$% ", tp).strip()
-    print (text, pattern)
-
-allPhrases = text.split("*#$%")
-questionsList = []
-for phrase in allPhrases:
-    questionsList.append(nerTagging(phrase))
-    
+    allPhrases = text.split("*#$%")
+    questionsList = []
+    for phrase in allPhrases:
+        questionsList.append(nerTagging(phrase))
