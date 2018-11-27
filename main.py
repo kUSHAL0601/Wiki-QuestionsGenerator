@@ -12,7 +12,7 @@ def data(topic):
 	return page.content
 	# print(page.summary)
 
-x=data("India").split('\n')
+x=data("Dog").split('\n')
 blocks=[]
 for i in x:
 	if i and not "=" in i:
@@ -79,5 +79,6 @@ for i in sentences:
 	qsn=genQuestion(i)
 	if qsn:
 		qsns.append(qsn)
-		print(qsn)
 qsns=list(set(qsns))
+for i in qsns:
+	print(i)
