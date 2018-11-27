@@ -11,4 +11,7 @@ Final Poject for NLP course
 2. We will try to follow the SSF format in our workflow. It has been just taught so we cannot guarantee how well we can implement it.
 
 # INSTRUCTIONS
-Try to make your own branches for work, and merge it with master after checking there are no merge conflicts.
++ Try to make your own branches for work, and merge it with master after checking there are no merge conflicts.
+
+# FINAL WORK SLIDES
++ https://prezi.com/view/fSYQVKY82Lb1vXIDi3n9/
