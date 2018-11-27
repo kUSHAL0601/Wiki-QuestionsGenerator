@@ -1,139 +1,100 @@
-from textblob import TextBlob, Word
-import requests, nltk, sys, wikipedia, re
-from nltk.tree import Tree
-from nltk import word_tokenize, pos_tag, ne_chunk
-from nltk.chunk import tree2conlltags
+import sys, os, argparse, re, subprocess, wikipedia, json, pprint
+
+
+class FactoidQuesGenerator():
+
+	def __init__(self, input_file=None):
+		if input_file:
+			print ("Taking file %s as input" % (input_file))
+			self.input_file = input_file
+		currDirName = os.path.dirname(os.path.realpath(__file__))
+		os.chdir(os.path.join(currDirName, 'JavaBackend'))
+
+	def get_rawOutput(self, input_sentence):
+		# This function invokes the QuestionGenerator Java class to generate questions given a declarative statement.
+		# input_sentence is the declarative statement that needs to be converted to a question
+
+		# Runs the command "java -Xmx1200m -cp question-generation.jar edu/cmu/ark/QuestionAsker --verbose --model models/linear-regression-ranker-reg500.ser.gz --prefer-wh --max-length 30 --downweight-pro"
+		p = subprocess.Popen(['bash', 'run.sh'], stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr=subprocess.STDOUT)
+
+		output = p.communicate(input=input_sentence)[0]
+		return output.decode() # Return format is question followed by answer followed by score
+
+	def generate_question(self, sentence):
+		# The main method that generates a question for a single sentence
+
+		output = self.get_rawOutput(bytearray(sentence, 'utf-8'))
+		try:
+			quest_ans_pairs = output.split('\n')[3:]
+		except:
+			exit('No questions detected. Please try a different sentence.')
+
+		question_types = ['Wh', 'Are', 'How', 'Do']
+		results = []
+
+		for qType in question_types:
+			regexStr = r"{}\w+|\W\?".format(qType)
+			for quest_ans in quest_ans_pairs:
+				if re.match(regexStr, quest_ans):
+					qa_tuple = quest_ans.split('\t')
+					question, sent, answer, score = qa_tuple[0], qa_tuple[1], qa_tuple[2], qa_tuple[3]
+					results.append({'Sentence': sent, "Question": question, 'Answer': answer, 'Score': score})
+
+		return results # Returns an array of length (question_types)
+
+def add_arguments():
+	parser = argparse.ArgumentParser()
+	parser.add_argument('-s', '-sentence', type=str, help="The sentence for which questions are to be generated.")
+	parser.add_argument('-t', '-question_type', type=str, default=['Wh', 'Are', 'Who', 'Do'], choices=['Wh', 'Are', 'Who', 'Do', 'All'], help='The types of questions to be generated.')
+	return parser.parse_args()
 
 def data(topic):
-    page=wikipedia.page(topic)
-    return page.content
+	page=wikipedia.page(topic)
+	return page.content
 
-x=data("India").split('\n')
-blocks=[]
-for i in x:
-    if i and not "=" in i:
-        blocks.append(i)
+def getWikiArticle(topic, number=10):
+	x=data(topic).split('\n')
+	blocks=[]
+	for i in x:
+		if i and not "=" in i:
+			blocks.append(i)
+			
+	sentences=[]
+	for i in blocks:
+		sentences+=i.split(".")
+	return sentences[:number]
 
-sentences=[]
-for i in blocks:
-    sentences+=i.split(".")
+q  = FactoidQuesGenerator()
 
-def outputQPhrase(phraseList):
-    nounPhrases = ["NN", "NNS", "NNP", "NNPS"]
-    posTagList = [phrase[1] for phrase in phraseList]
-    output = []
-    for (i,wordTuple) in enumerate(phraseList):
-        if wordTuple[1] == "PRP" or (wordTuple[2] == "PERSON" and wordTuple[1] in nounPhrases):
-            output.append(("who", wordTuple[0]))
-        if not (wordTuple[2] == "PERSON" or wordTuple[2] == "TIME") and wordTuple[1] in nounPhrases:
-            output.append(("what", wordTuple[0]))
-        if wordTuple[2] == "GPE" and "IN" in posTagList and wordTuple[1] in nounPhrases:
-            inIndex = posTagList.index("IN")
-            if inIndex < i and phraseList[inIndex] in ["on", "in", "at", "over", "to"]:
-                output.append(("where", wordTuple[0]))
-        if (wordTuple[2] == "TIME" and wordTuple[1] in nounPhrases) or (re.match("[1|2]\d\d\d$",wordTuple[0])):
-            output.append(("when", wordTuple[0]))
-        if (wordTuple[2] == "PERSON" and wordTuple[1] in nounPhrases) and i<(len(phraseList)-1) and phraseList[i+1][1] == "POS":
-            try:
-                nextNPIdx = [posTagList.index(i) for i in posTagList[i+1:] if i in nounPhrases][0]
-                output.append(("whose " + phraseList[nextNPIdx][0], wordTuple[0]))
-            except:
-                pass
-        if (wordTuple[1] == "CD"):
-            try:
-                nextNPIdx = [posTagList.index(i) for i in posTagList[i+1:] if i in nounPhrases][0]
-                output.append(("how many " + phraseList[nextNPIdx][0], wordTuple[0]))
-            except:
-                pass
-    return output
+while True:
+	qType = input("Enter input type (W for wikipedia, S for sentence): ")
 
-def getNodes(parent):
-    allLeaves = []
-    for node in parent:
-        if type(node) is nltk.Tree:
-            allLeaves.append(node.leaves())
-            getNodes(node)
-    allLeaves.sort(key=len, reverse=True)
-    return allLeaves
+	if qType == "W":
+		topic = input("Enter topic: ")
+		sentences = getWikiArticle(topic)
+	elif qType == "S":
+		sentence = input("Enter sentence: ")
+		sentences = [sentence]
+	else:
+		print("Invalid question type")
+		continue
 
-def nerTagging(sentence):
-    sent = tree2conlltags(ne_chunk(pos_tag(word_tokenize(sentence))))
-    temp = []
-    skip_next = False
-    for (i,tag) in enumerate(sent):
-        if skip_next:
-            skip_next = False
-            continue
-        if "-" in tag[2]:
-            if (i+1) <len(sent) and '-' in sent[i+1][2] and tag[2].split('-')[1]==sent[i+1][2].split('-')[1]:
-                skip_next = True
-                temp.append((tag[0] + " " + sent[i+1][0], tag[1], tag[2].split("-")[1]))
-            else:
-                temp.append((tag[0], tag[1], tag[2].split("-")[1]))
-        else:
-            temp.append((tag[0], tag[1], tag[2]))
-    output = []
-    print (temp)
-    return outputQPhrase(temp)
+	final = []
+	for sentence in sentences:
+		question_list = q.generate_question(sentence)
+		final.extend(question_list)
 
-rules = [
-    "VP < (S=unmv $,, /,/)",
-    "S < PP|ADJP|ADVP|S|SBAR=unmv > ROOT",
-    "/\\.*/ < CC << NP|ADJP|VP|ADVP|PP=unmv",
-    "SBAR < (IN|DT < /[^that]/) << NP|PP=unmv",
-    "SBAR < /^WH.*P$/ << NP|ADJP|VP|ADVP|PP=unmv",
-    "SBAR <, IN|DT < (S < (NP=unmv !$,, VP))",
-    "NP << (PP=unmv !< (IN < of|about))",
-    "PP << PP=unmv",
-    "NP $ VP << PP=unmv",
-    "SBAR=unmv [ !> VP | $-- /,/ | < RB ]",
-    "SBAR=unmv !< WHNP <(/^[^S].*/ !<< that|whether|how)",
-    "NP=unmv < EX",
-    " /^S/ < '' << NP|ADJP|VP|ADVP|PP=unmv",
-    "PP=unmv !< NP",
-    "NP=unmv $ @NP",
-    "NP|PP|ADJP|ADVP << NP|ADJP|VP|ADVP|PP=unmv",
-    "@UNMV << NP|ADJP|VP|ADVP|PP=unmv"
-]
-url = "http://localhost:9010/tregex"
-treesList = []
-data = sentences[:5]
-for (i,text) in enumerate(data):
-    temp = []
-    for rule in rules:
-        request_params = {"pattern": rule}
-        r = requests.post(url, data=text.encode('utf-8'), params=request_params)
-        s = r.json()
-        temp.append(list(s['sentences']))
-    unmovableWords = []
-    for j in temp:
-        for k in j:
-            for l in k:
-                if 'namedNodes' in k[l]:
-                    if 'unmv' in k[l]['namedNodes'][0]:
-                        string = k[l]['namedNodes'][0]['unmv']
-                        unmovableWords.extend(getNodes(Tree.fromstring(string)))
-    unmovableWords.sort(key=len, reverse=True)
-    finalList = []
-    exceptions = ["-LRB-", "-RRB-", ":", ","]
-    for phrase in unmovableWords:
-        tmp = []
-        for word in phrase:
-            if word not in exceptions:
-                tmp.append(word)
-        finalList.append(tmp)
-    finalList.sort(key=len, reverse=True)
-    sentExceptions = ["(",")",":",","]
-    for sentExcept in sentExceptions:
-        text = text.replace(sentExcept, "")
+	outputDict = {}
 
-    for phraseList in finalList:
-        phrase = " ".join(phraseList)
-        pattern = "\s(" + phrase + ")[\s|,|:|-]"
-        tp = " " + text + " "
-        text = re.sub(pattern, " *#$% ", tp).strip()
+	for qa in final:
+		if qa['Sentence'] in outputDict:
+			outputDict[qa['Sentence']].append({"Question": qa['Question'], "Answer": qa['Answer'], "Score": qa['Score']})
+		else:
+			outputDict[qa['Sentence']] = [{"Question": qa['Question'], "Answer": qa['Answer'], "Score": qa['Score']}]
 
-    allPhrases = text.split("*#$%")
-    questionsList = []
-    for phrase in allPhrases:
-        questionsList.append(nerTagging(phrase))
+	output = [{elem: sorted(outputDict[elem], key=lambda k: float(k['Score']))} for elem in outputDict]
+
+	outputDict = json.loads(json.dumps(outputDict))
+
+	with open("../output.json","w") as f:
+		json.dump(outputDict, f, indent=4)
