@@ -1,5 +1,6 @@
 # Wiki-QuestionsGenerator
-Final Poject for NLP course
++ A framework which generates trivia from given given wikipedia page dump.
++ A detailed flow on how things are implemented and how to run them can be seen in the explicit folder themselves.
 
 # WORKFLOW
 + In the first stage we focus on over generating questions taking different answer phrases. We would first be focusing on generating the basic wh questions from the given corpus, as our initial goal. We will first be analysing the sentences and mark the unmovable phrases. We will then generate the possible question phrases for each answer phrase. We will then decompose the main verb and change the subject and predicate for question formation. As part of our next stage, we will also focus on anaphora resolution, I.e. replacing the pronouns with the nearest object.
